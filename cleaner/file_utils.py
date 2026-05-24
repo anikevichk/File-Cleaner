@@ -130,15 +130,3 @@ def collect_files(directories):
                     print(f"[ERROR] Cannot read {path}: {error}")
 
     return files
-
-def remove_empty_directories(directories, keep_roots=True):
-    for directory in directories:
-        for root, dirs, files in os.walk(directory, topdown=False):
-            if keep_roots and os.path.abspath(root) == os.path.abspath(directory):
-                continue
-
-            try:
-                if not os.listdir(root):
-                    os.rmdir(root)
-            except OSError:
-                pass
