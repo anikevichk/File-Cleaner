@@ -14,6 +14,7 @@ File-Cleaner/
 ├── create_expected_final_data.sh
 ├── README.md
 └── cleaner/
+    ├── actions.py
     ├── config.py
     ├── file_utils.py
     ├── output.py
@@ -28,6 +29,7 @@ File-Cleaner/
 | `create_test_data.sh` | Skrypt Bash tworzący przykładowe katalogi `X`, `Y1`, `Y2` oraz pliki testowe. |
 | `create_expected_final_data.sh` | Skrypt Bash tworzący oczekiwany wynik końcowy po uruchomieniu programu z opcją `--apply`. |
 | `README.md` | Dokumentacja projektu: opis, sposób uruchomienia, tryby działania i konfiguracja. |
+| `cleaner/actions.py` | Obsługuje wybór akcji w trybie interaktywnym, np. wykonanie jednej akcji, pominięcie jej albo zastosowanie tej samej decyzji dla kolejnych plików. |
 | `cleaner/config.py` | Odczytuje ustawienia z pliku konfiguracyjnego `.clean_files`. |
 | `cleaner/file_utils.py` | Zawiera funkcje pomocnicze, np. obliczanie hashy, sprawdzanie uprawnień, nazw plików i zbieranie listy plików. |
 | `cleaner/output.py` | Odpowiada za formatowanie i wypisywanie wyników działania programu. |
@@ -65,7 +67,27 @@ Domyślnie skrypt tylko wypisuje sugerowane akcje i nie zmienia plików.
 ```bash
 python3 clean_files.py --apply --config test_data/.clean_files test_data/X test_data/Y1 test_data/Y2
 ```
-### 4. Utworzenie oczekiwanego wyniku końcowego
+
+Opcja `--apply` automatycznie wykonuje wszystkie sugerowane akcje.
+
+### 4. Uruchomienie w trybie interaktywnym
+
+```bash
+python3 clean_files.py --interactive --config test_data/.clean_files test_data/X test_data/Y1 test_data/Y2
+```
+
+W trybie interaktywnym program pyta przed wykonaniem każdej znalezionej akcji. Dostępne odpowiedzi:
+
+| Odpowiedź | Znaczenie |
+|---|---|
+| `y` | wykonaj tę jedną akcję |
+| `n` | pomiń tę jedną akcję |
+| `a` | wykonuj automatycznie kolejne akcje tego samego typu |
+| `s` | pomijaj kolejne akcje tego samego typu |
+
+Dzięki temu można wybrać akcję osobno dla konkretnego pliku albo zastosować jedną decyzję dla całej grupy podobnych problemów.
+
+### 5. Utworzenie oczekiwanego wyniku końcowego
 
 Można również uruchomić skrypt tworzący katalog z oczekiwanym stanem plików po zastosowaniu opcji `--apply`.
 
@@ -75,7 +97,7 @@ chmod +x create_expected_final_data.sh
 ```
 Katalog ten reprezentuje poprawny wynik końcowy: wszystkie potrzebne pliki znajdują się w katalogu X, duplikaty, pliki puste i tymczasowe są usunięte, nazwy oraz uprawnienia są poprawione.
 
-### 5. Porównanie wyniku
+### 6. Porównanie wyniku
 
 Po uruchomieniu programu z opcją --apply można porównać otrzymany wynik z oczekiwanym wynikiem końcowym:
 ```bash
@@ -132,8 +154,10 @@ Znaczenie opcji:
 | `replacement` | Znak używany do zastępowania problematycznych znaków |
 | `temp_extensions` | Rozszerzenia traktowane jako pliki tymczasowe |
 
-## Tryb bezpieczny
+## Tryby wykonywania akcji
 
-Bez opcji `--apply` skrypt tylko wypisuje sugerowane akcje.
+Bez opcji `--apply` i `--interactive` skrypt działa w trybie bezpiecznym: tylko wypisuje sugerowane akcje i nie zmienia plików.
 
-Z opcją `--apply` skrypt faktycznie wykonuje akcje, takie jak usuwanie, kopiowanie, zmiana nazwy oraz zmiana uprawnień.
+Z opcją `--apply` skrypt wykonuje wszystkie sugerowane akcje automatycznie, np. usuwanie, przenoszenie, kopiowanie, zmianę nazwy oraz zmianę uprawnień.
+
+Z opcją `--interactive` skrypt pyta użytkownika, czy wykonać daną akcję. Użytkownik może podjąć decyzję dla pojedynczego pliku albo wybrać wspólną decyzję dla kolejnych akcji tego samego typu.

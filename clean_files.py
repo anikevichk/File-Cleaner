@@ -4,6 +4,7 @@ import argparse
 import os
 
 from cleaner.config import read_config
+from cleaner.actions import ActionChooser
 from cleaner.file_utils import collect_files
 from cleaner.checks import (
     check_empty,
@@ -17,8 +18,12 @@ from cleaner.checks import (
 )
 
 
-def refresh_files(directories, apply_changes):
-    if apply_changes:
+def should_refresh(apply_changes, chooser):
+    return apply_changes or chooser is not None
+
+
+def refresh_files(directories, apply_changes, chooser):
+    if should_refresh(apply_changes, chooser):
         return collect_files(directories)
 
     return None
@@ -43,6 +48,66 @@ def remove_empty_directories(directories):
                     pass
 
 
+def get_checks(config, temp_extensions, x_directory):
+    return {
+        "empty": lambda files, apply, base, chooser: check_empty(
+            files,
+            apply,
+            base,
+            chooser
+        ),
+        "temp": lambda files, apply, base, chooser: check_temp(
+            files,
+            temp_extensions,
+            apply,
+            base,
+            chooser
+        ),
+        "duplicates": lambda files, apply, base, chooser: check_duplicates(
+            files,
+            apply,
+            base,
+            chooser
+        ),
+        "versions": lambda files, apply, base, chooser: check_versions(
+            files,
+            apply,
+            base,
+            chooser
+        ),
+        "names": lambda files, apply, base, chooser: check_bad_names(
+            files,
+            config["bad_chars"],
+            config["replacement"],
+            apply,
+            base,
+            chooser
+        ),
+        "permissions": lambda files, apply, base, chooser: check_permissions(
+            files,
+            config["permissions"],
+            apply,
+            base,
+            chooser
+        ),
+        "missing": lambda files, apply, base, chooser: check_missing_in_x(
+            files,
+            x_directory,
+            temp_extensions,
+            apply,
+            base,
+            chooser
+        ),
+        "outside_duplicates": lambda files, apply, base, chooser: check_outside_x_duplicates(
+            files,
+            x_directory,
+            apply,
+            base,
+            chooser
+        ),
+    }
+
+
 def run_all_checks(
     files,
     directories,
@@ -50,53 +115,25 @@ def run_all_checks(
     config,
     temp_extensions,
     apply_changes,
-    base_directory
+    base_directory,
+    chooser=None
 ):
-    check_empty(files, apply_changes, base_directory)
-    files = refresh_files(directories, apply_changes) or files
+    checks = get_checks(config, temp_extensions, x_directory)
 
-    check_temp(files, temp_extensions, apply_changes, base_directory)
-    files = refresh_files(directories, apply_changes) or files
+    order = [
+        "empty",
+        "temp",
+        "versions",
+        "missing",
+        "outside_duplicates",
+        "duplicates",
+        "names",
+        "permissions",
+    ]
 
-    check_versions(files, apply_changes, base_directory)
-    files = refresh_files(directories, apply_changes) or files
-
-    check_missing_in_x(
-        files,
-        x_directory,
-        temp_extensions,
-        apply_changes,
-        base_directory
-    )
-    files = refresh_files(directories, apply_changes) or files
-
-    check_outside_x_duplicates(
-        files,
-        x_directory,
-        apply_changes,
-        base_directory
-    )
-    files = refresh_files(directories, apply_changes) or files
-
-    check_duplicates(files, apply_changes, base_directory)
-    files = refresh_files(directories, apply_changes) or files
-
-    check_bad_names(
-        files,
-        config["bad_chars"],
-        config["replacement"],
-        apply_changes,
-        base_directory
-    )
-    files = refresh_files(directories, apply_changes) or files
-
-    check_permissions(
-        files,
-        config["permissions"],
-        apply_changes,
-        base_directory
-    )
-    files = refresh_files(directories, apply_changes) or files
+    for check_name in order:
+        checks[check_name](files, apply_changes, base_directory, chooser)
+        files = refresh_files(directories, apply_changes, chooser) or files
 
     return files
 
@@ -107,45 +144,11 @@ def run_selected_check(
     x_directory,
     config,
     temp_extensions,
-    base_directory
+    base_directory,
+    chooser=None
 ):
-    if args.mode == "empty":
-        check_empty(files, args.apply, base_directory)
-
-    elif args.mode == "temp":
-        check_temp(files, temp_extensions, args.apply, base_directory)
-
-    elif args.mode == "duplicates":
-        check_duplicates(files, args.apply, base_directory)
-
-    elif args.mode == "versions":
-        check_versions(files, args.apply, base_directory)
-
-    elif args.mode == "names":
-        check_bad_names(
-            files,
-            config["bad_chars"],
-            config["replacement"],
-            args.apply,
-            base_directory
-        )
-
-    elif args.mode == "permissions":
-        check_permissions(
-            files,
-            config["permissions"],
-            args.apply,
-            base_directory
-        )
-
-    elif args.mode == "missing":
-        check_missing_in_x(
-            files,
-            x_directory,
-            temp_extensions,
-            args.apply,
-            base_directory
-        )
+    checks = get_checks(config, temp_extensions, x_directory)
+    checks[args.mode](files, args.apply, base_directory, chooser)
 
 
 def main():
@@ -184,12 +187,25 @@ def main():
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Actually apply changes."
+        help="Actually apply all suggested changes."
+    )
+
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Ask before applying each suggested action."
     )
 
     args = parser.parse_args()
 
-    directories = [os.path.abspath(directory) for directory in args.directories]
+    if args.apply and args.interactive:
+        parser.error("Use either --apply or --interactive, not both.")
+
+    directories = [
+        os.path.abspath(directory)
+        for directory in args.directories
+    ]
+
     x_directory = directories[0]
     base_directory = os.path.commonpath(directories)
 
@@ -212,7 +228,10 @@ def main():
     print(f"Config: {args.config}")
     print(f"Mode: {args.mode}")
     print(f"Apply changes: {args.apply}")
+    print(f"Interactive mode: {args.interactive}")
     print(f"Files found: {len(files)}")
+
+    chooser = ActionChooser(interactive=args.interactive) if args.interactive else None
 
     if args.mode == "all":
         run_all_checks(
@@ -222,7 +241,8 @@ def main():
             config,
             temp_extensions,
             args.apply,
-            base_directory
+            base_directory,
+            chooser
         )
     else:
         run_selected_check(
@@ -231,10 +251,11 @@ def main():
             x_directory,
             config,
             temp_extensions,
-            base_directory
+            base_directory,
+            chooser
         )
 
-    if args.apply:
+    if args.apply or args.interactive:
         remove_empty_directories(directories[1:])
 
 
